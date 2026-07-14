@@ -30,11 +30,13 @@ from database import (
 LabelBase.register(name="NanumGothic", fn_regular="NanumGothic.ttf")
 
 # =========================================================================
-# 윈도우 기본 크기 및 최소 크기 제한 설정
+# 윈도우 기본 크기 및 최소 크기 제한 설정 (데스크톱에서만 적용)
 # =========================================================================
-Window.size = (780, 540)
-Window.minimum_width = 640
-Window.minimum_height = 480
+from kivy.utils import platform
+if platform not in ('android', 'ios'):
+    Window.size = (780, 540)
+    Window.minimum_width = 640
+    Window.minimum_height = 480
 
 # =========================================================================
 # 디자인 토큰
@@ -279,7 +281,12 @@ class HomeScreen(Screen):
             padding=[dp(16), dp(16), dp(16), dp(16)],
             spacing=dp(14)
         )
-        self.content.bind(minimum_height=self.content.setter('height'))
+        
+        def update_height(*args):
+            self.content.height = max(self.content.minimum_height, self.scroll_view.height)
+            
+        self.content.bind(minimum_height=update_height)
+        self.scroll_view.bind(height=update_height)
 
         # --- 1. 인사말 카드 ---
         self.greeting_card = CardWidget(
@@ -435,8 +442,8 @@ class HomeScreen(Screen):
         self.record_btn.bind(on_release=self.go_record_screen)
         self.content.add_widget(self.record_btn)
 
-        # 하단 여유 공간
-        self.content.add_widget(Widget(size_hint_y=None, height=dp(8)))
+        # 상단 정렬을 위한 스페이서
+        self.content.add_widget(Widget(size_hint_y=1))
 
         self.scroll_view.add_widget(self.content)
         self.main_layout.add_widget(self.scroll_view)
@@ -546,7 +553,11 @@ class RecordScreen(Screen):
             padding=[dp(16), dp(16), dp(16), dp(16)],
             spacing=dp(14)
         )
-        self.content.bind(minimum_height=self.content.setter('height'))
+        def update_height(*args):
+            self.content.height = max(self.content.minimum_height, self.scroll_view.height)
+            
+        self.content.bind(minimum_height=update_height)
+        self.scroll_view.bind(height=update_height)
 
         # --- 타이틀 카드 ---
         title_card = CardWidget(
@@ -708,8 +719,8 @@ class RecordScreen(Screen):
         btn_row.add_widget(cancel_btn)
         self.content.add_widget(btn_row)
 
-        # 하단 여유 공간
-        self.content.add_widget(Widget(size_hint_y=None, height=dp(8)))
+        # 상단 정렬을 위한 스페이서
+        self.content.add_widget(Widget(size_hint_y=1))
 
         self.scroll_view.add_widget(self.content)
         self.main_layout.add_widget(self.scroll_view)
@@ -857,7 +868,12 @@ class StatsScreen(Screen):
             padding=[dp(16), dp(16), dp(16), dp(16)],
             spacing=dp(14)
         )
-        self.content.bind(minimum_height=self.content.setter('height'))
+        
+        def update_height(*args):
+            self.content.height = max(self.content.minimum_height, self.scroll_view.height)
+            
+        self.content.bind(minimum_height=update_height)
+        self.scroll_view.bind(height=update_height)
 
         # --- 타이틀 카드 ---
         title_card = CardWidget(
@@ -926,8 +942,8 @@ class StatsScreen(Screen):
         self.chart_card.add_widget(self.chart_container)
         self.content.add_widget(self.chart_card)
 
-        # 하단 여유 공간
-        self.content.add_widget(Widget(size_hint_y=None, height=dp(8)))
+        # 상단 정렬을 위한 스페이서
+        self.content.add_widget(Widget(size_hint_y=1))
 
         self.scroll_view.add_widget(self.content)
         self.main_layout.add_widget(self.scroll_view)
@@ -990,7 +1006,11 @@ class SettingsScreen(Screen):
             padding=[dp(16), dp(16), dp(16), dp(16)],
             spacing=dp(14)
         )
-        self.content.bind(minimum_height=self.content.setter('height'))
+        def update_height(*args):
+            self.content.height = max(self.content.minimum_height, self.scroll_view.height)
+            
+        self.content.bind(minimum_height=update_height)
+        self.scroll_view.bind(height=update_height)
 
         # --- 타이틀 카드 ---
         title_card = CardWidget(
@@ -1098,8 +1118,8 @@ class SettingsScreen(Screen):
         info_card.add_widget(info_desc)
         self.content.add_widget(info_card)
 
-        # 넉넉한 하단 여유 공간
-        self.content.add_widget(Widget(size_hint_y=None, height=dp(80)))
+        # 상단 정렬을 위한 스페이서
+        self.content.add_widget(Widget(size_hint_y=1))
 
         self.scroll_view.add_widget(self.content)
         self.main_layout.add_widget(self.scroll_view)
