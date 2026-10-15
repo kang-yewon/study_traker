@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">StudyTimer</string>
+    <string name="title_activity_main">StudyTimer</string>
+    <string name="package_name">org.yourname.studytracker</string>
+    <string name="custom_url_scheme">org.yourname.studytracker</string>
+</resources>

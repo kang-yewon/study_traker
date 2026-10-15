@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>StudyTimer</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="chart.umd.js"></script>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <button id="nav-btn-home" class="nav-btn active">Home</button>
+    <button id="nav-btn-stats" class="nav-btn">통계</button>
+  </header>
+
+  <!-- Screen Container -->
+  <main class="screen-container">
+    
+    <!-- 1. Home Screen -->
+    <section id="screen-home" class="screen active">
+      <div class="home-layout">
+        <!-- Left Area -->
+        <div class="left-panel">
+          <h2 class="panel-title">오늘 공부시간</h2>
+          <div class="chart-wrapper">
+            <canvas id="donut-canvas"></canvas>
+            <div id="donut-center-text" class="donut-center-text">0m</div>
+          </div>
+          <div class="btn-group-home">
+            <button id="btn-go-record" class="btn-home btn-record">오늘 공부 기록</button>
+            <button id="btn-go-settings" class="btn-home btn-settings">설정</button>
+          </div>
+        </div>
+
+        <!-- Right Area -->
+        <div class="right-panel">
+          <div class="summary-card">
+            <div class="summary-label">오늘 총 공부시간</div>
+            <div id="home-today-total" class="summary-value">0m</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">전체 누적 공부시간</div>
+            <div id="home-all-total" class="summary-value all-time">0m</div>
+          </div>
+          <div class="subject-list-title">과목별 공부시간</div>
+          <div id="home-subject-list" class="subject-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Record Screen -->
+    <section id="screen-record" class="screen">
+      <div class="record-container">
+        <h2 class="page-title">공부 기록</h2>
+        <p class="page-subtitle">시간과 분을 입력하고 저장해주세요. 같은 날짜로 다시 저장하면 기존 기록을 덮어씁니다.</p>
+
+        <!-- Date Selector -->
+        <div class="date-selector-row">
+          <span class="date-selector-label">날짜 조정</span>
+          <input type="number" id="input-year" class="date-input year-input" placeholder="년">
+          <span>년</span>
+          <input type="number" id="input-month" class="date-input" placeholder="월" min="1" max="12">
+          <span>월</span>
+          <input type="number" id="input-day" class="date-input" placeholder="일" min="1" max="31">
+          <span>일</span>
+        </div>
+        <div id="record-date-error" class="date-error-msg"></div>
+
+        <!-- Dynamic Subject Form -->
+        <div id="record-form-list" class="form-scroll-area">
+          <!-- Dynamically populated -->
+        </div>
+
+        <!-- Bottom Actions -->
+        <div class="record-action-btns">
+          <button id="btn-save-record" class="btn-action btn-save">기록 저장</button>
+          <button id="btn-cancel-record" class="btn-action btn-cancel">취소 및 돌아가기</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Stats Screen -->
+    <section id="screen-stats" class="screen">
+      <div class="stats-container">
+        <!-- Period Bar -->
+        <div class="filter-bar">
+          <span class="filter-label">기간 선택:</span>
+          <button class="filter-btn active" data-period="week">일주일</button>
+          <button class="filter-btn" data-period="month">한달</button>
+          <button class="filter-btn" data-period="year">일년</button>
+        </div>
+
+        <!-- Chart Area -->
+        <div class="stats-chart-wrapper">
+          <canvas id="stats-canvas"></canvas>
+          <div id="stats-no-data" class="no-data-msg">기록이 없습니다</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Settings Screen -->
+    <section id="screen-settings" class="screen">
+      <div class="settings-container">
+        <h2 class="page-title">설정</h2>
+        <p class="page-subtitle">앱의 설정을 관리하고 데이터를 초기화할 수 있습니다.</p>
+
+        <div class="settings-card">
+          <div class="settings-section-title">데이터 관리</div>
+          <button id="btn-open-reset-modal" class="btn-reset">공부 기록 전체 초기화</button>
+        </div>
+
+        <button id="btn-settings-back" class="btn-back-home">홈으로 돌아가기</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Confirmation Modal -->
+  <div id="confirm-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-title">기록 초기화 확인</div>
+      <div class="modal-body">정말로 모든 공부 기록을 초기화하시겠습니까?<br>이 작업은 되돌릴 수 없습니다.</div>
+      <div class="modal-actions">
+        <button id="btn-modal-confirm" class="modal-btn confirm">예, 초기화합니다</button>
+        <button id="btn-modal-cancel" class="modal-btn cancel">아니오</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

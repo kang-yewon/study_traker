@@ -1,0 +1,17 @@
+{
+  "name": "studytracker",
+  "version": "1.0.0",
+  "description": "Study Tracker mobile application with Capacitor & Android WebView engine",
+  "private": true,
+  "scripts": {
+    "build": "npx cap copy",
+    "sync": "npx cap sync",
+    "open:android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.0",
+    "@capacitor/cli": "^7.4.0",
+    "@capacitor/core": "^7.4.0",
+    "chart.js": "^4.5.1"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "appId": "org.yourname.studytracker",
+  "appName": "StudyTimer",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
