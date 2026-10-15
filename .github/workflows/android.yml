@@ -27,9 +27,7 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: '21'
-
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
+        cache: 'gradle'
 
     - name: Sync Capacitor Android
       run: npx cap sync android
