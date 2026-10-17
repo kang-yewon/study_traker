@@ -651,28 +651,6 @@ body {
   cursor: pointer;
 }
 
-.settings-top-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 4px;
-}
-
-.btn-top-back {
-  background: none;
-  border: none;
-  font-size: 22px;
-  font-weight: bold;
-  color: #2D3748;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  line-height: 1;
-}
-
-.btn-top-back:active {
-  background-color: #EDF2F7;
-}
 
 .btn-back-home {
   height: 58px;

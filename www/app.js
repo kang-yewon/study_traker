@@ -1210,11 +1210,6 @@
     });
 
     // 5.5 Settings Screen Events
-    const topBackBtn = document.getElementById('btn-settings-top-back');
-    if (topBackBtn) {
-      topBackBtn.addEventListener('click', () => showScreen('home'));
-    }
-
     document.getElementById('btn-open-add-subject').addEventListener('click', openAddSubjectModal);
     document.getElementById('btn-confirm-add-subject').addEventListener('click', confirmAddSubject);
     document.getElementById('btn-cancel-add-subject').addEventListener('click', () => {
