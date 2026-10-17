@@ -1,57 +1,44 @@
 // Study Tracker Web / Capacitor App Logic
+// Comprehensive update: Subject management, Stopwatch with background persistence, and Date-specific adjustment
 
 (function() {
   'use strict';
 
   // --- Constants & Default Data ---
   const DEFAULT_SUBJECTS = [
-    { code: 'korean', name: '국어', color: '#4A90E2' },
-    { code: 'english', name: '영어', color: '#2ECC71' },
-    { code: 'math', name: '수학', color: '#F39C12' },
-    { code: 'science', name: '과학', color: '#9B59B6' },
-    { code: 'social', name: '사회', color: '#F1C40F' }
+    { code: 'korean', name: '국어', color: '#4A90E2', isDefault: true, deleted: false },
+    { code: 'english', name: '영어', color: '#2ECC71', isDefault: true, deleted: false },
+    { code: 'math', name: '수학', color: '#F39C12', isDefault: true, deleted: false },
+    { code: 'science', name: '과학', color: '#9B59B6', isDefault: true, deleted: false },
+    { code: 'social', name: '사회', color: '#F1C40F', isDefault: true, deleted: false }
+  ];
+
+  // Available Color Palette (as requested by user)
+  const COLOR_PALETTE = [
+    { name: '빨강', hex: '#E74C3C' },
+    { name: '분홍', hex: '#FF69B4' },
+    { name: '갈색', hex: '#8D6E63' },
+    { name: '짙은 남색', hex: '#1A237E' },
+    { name: '민트색', hex: '#1ABC9C' },
+    { name: '아이보리', hex: '#F5F5DC' }
   ];
 
   const STORAGE_KEYS = {
-    SUBJECTS: 'study_tracker_subjects_v1',
-    RECORDS: 'study_tracker_records_v1'
+    SUBJECTS: 'study_tracker_subjects_v2',
+    RECORDS: 'study_tracker_records_v1',
+    STOPWATCH: 'study_tracker_stopwatch_state_v1'
   };
 
-  // --- State ---
+  // --- State Variables ---
   let currentScreen = 'home';
   let currentStatsPeriod = 'week';
   let donutChart = null;
   let statsChart = null;
+  let stopwatchInterval = null;
+  let selectedNewSubjectColor = null;
+  let subjectToDeleteCode = null;
 
-  // --- Helpers ---
-  function getSubjects() {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {
-      console.error(e);
-    }
-    return DEFAULT_SUBJECTS;
-  }
-
-  function getRecords() {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.RECORDS);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {
-      console.error(e);
-    }
-    return {};
-  }
-
-  function saveRecords(records) {
-    try {
-      localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(records));
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
+  // --- Helper: Date Functions ---
   function todayStr() {
     const now = new Date();
     const y = now.getFullYear();
@@ -85,15 +72,95 @@
     return `${m}m`;
   }
 
+  // Format seconds into HH:MM (e.g. 01:32) as seen in Image 2
+  function formatSecondsToHHMM(totalSeconds) {
+    const sec = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    const totalMinutes = Math.floor(sec / 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    const hStr = String(h).padStart(2, '0');
+    const mStr = String(m).padStart(2, '0');
+    return `${hStr}:${mStr}`;
+  }
+
+  // --- Data Access: Subjects ---
+  function getAllSubjects() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    // Initial migration/setup
+    saveAllSubjects(DEFAULT_SUBJECTS);
+    return DEFAULT_SUBJECTS;
+  }
+
+  function saveAllSubjects(subjects) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function getActiveSubjects() {
+    return getAllSubjects().filter(s => !s.deleted);
+  }
+
+  function getSubjectByCode(code) {
+    return getAllSubjects().find(s => s.code === code) || null;
+  }
+
+  // Add a new subject
+  function addNewSubject(name, color) {
+    const subjects = getAllSubjects();
+    const code = 'subj_' + Date.now();
+    subjects.push({
+      code: code,
+      name: name.trim(),
+      color: color,
+      isDefault: false,
+      deleted: false
+    });
+    saveAllSubjects(subjects);
+  }
+
+  // Soft-delete subject (past study records are completely preserved!)
+  function softDeleteSubject(code) {
+    const subjects = getAllSubjects();
+    const target = subjects.find(s => s.code === code);
+    if (target) {
+      target.deleted = true;
+      saveAllSubjects(subjects);
+    }
+  }
+
+  // --- Data Access: Records ---
+  function getRecords() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.RECORDS);
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.error(e);
+    }
+    return {};
+  }
+
+  function saveRecords(records) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(records));
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   function getRecordForDate(dateStr) {
     const records = getRecords();
-    const entry = records[dateStr] || {};
-    const subjects = getSubjects();
-    const result = {};
-    subjects.forEach(s => {
-      result[s.code] = Number(entry[s.code]) || 0;
-    });
-    return result;
+    return records[dateStr] || {};
   }
 
   function saveRecordForDate(dateStr, minutesDict) {
@@ -107,16 +174,16 @@
 
   function getAllTimeTotal() {
     const records = getRecords();
-    const subjects = getSubjects();
+    const subjects = getAllSubjects();
     let total = 0;
     const perSubject = {};
     subjects.forEach(s => { perSubject[s.code] = 0; });
 
     Object.values(records).forEach(dayRecord => {
-      subjects.forEach(s => {
-        const val = Number(dayRecord[s.code]) || 0;
-        perSubject[s.code] += val;
-        total += val;
+      Object.entries(dayRecord).forEach(([code, val]) => {
+        const min = Number(val) || 0;
+        perSubject[code] = (perSubject[code] || 0) + min;
+        total += min;
       });
     });
     return { total, perSubject };
@@ -124,6 +191,74 @@
 
   function clearAllRecords() {
     localStorage.removeItem(STORAGE_KEYS.RECORDS);
+    localStorage.removeItem(STORAGE_KEYS.STOPWATCH);
+  }
+
+  // --- Data Access: Stopwatch State ---
+  function getStopwatchState() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.STOPWATCH);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return {
+      date: todayStr(),
+      activeSubject: null,
+      startTime: null,
+      accumulatedSeconds: {}
+    };
+  }
+
+  function saveStopwatchState(state) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.STOPWATCH, JSON.stringify(state));
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  // Calculate live current seconds for a subject
+  function getLiveSecondsForSubject(state, code) {
+    let sec = (state.accumulatedSeconds && state.accumulatedSeconds[code]) || 0;
+    if (state.activeSubject === code && state.startTime) {
+      const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+      sec += Math.max(0, elapsed);
+    }
+    return sec;
+  }
+
+  // Sync today's saved records into stopwatch state if stopwatch is empty
+  function initStopwatchFromSavedRecord(dateStr) {
+    let state = getStopwatchState();
+    if (state.date !== dateStr) {
+      // New day or different date selected
+      state = {
+        date: dateStr,
+        activeSubject: null,
+        startTime: null,
+        accumulatedSeconds: {}
+      };
+      // Populate from existing record if any
+      const saved = getRecordForDate(dateStr);
+      Object.entries(saved).forEach(([code, min]) => {
+        state.accumulatedSeconds[code] = (min || 0) * 60;
+      });
+      saveStopwatchState(state);
+    } else {
+      // If today and accumulatedSeconds empty, pre-fill from saved
+      const saved = getRecordForDate(dateStr);
+      let hasAccumulated = Object.values(state.accumulatedSeconds).some(s => s > 0);
+      if (!hasAccumulated && Object.keys(saved).length > 0) {
+        Object.entries(saved).forEach(([code, min]) => {
+          state.accumulatedSeconds[code] = (min || 0) * 60;
+        });
+        saveStopwatchState(state);
+      }
+    }
+    return state;
   }
 
   // --- Screen Navigation ---
@@ -146,14 +281,31 @@
 
     if (name === 'home') renderHomeScreen();
     if (name === 'stats') renderStatsScreen();
-    if (name === 'record') renderRecordScreen();
+    if (name === 'record') renderStopwatchScreen();
+    if (name === 'settings') renderSettingsScreen();
   }
 
-  // --- Home Screen Logic ---
+  // =========================================================================
+  // 1. Home Screen Logic
+  // =========================================================================
   function renderHomeScreen() {
     const today = todayStr();
     const todayData = getRecordForDate(today);
-    const subjects = getSubjects();
+    const allSubjects = getAllSubjects();
+    const activeSubjects = getActiveSubjects();
+
+    // Map of code to subject metadata
+    const subjectMap = {};
+    allSubjects.forEach(s => { subjectMap[s.code] = s; });
+
+    // Include active subjects, plus any deleted subjects that have minutes today
+    const displaySubjects = [...activeSubjects];
+    Object.keys(todayData).forEach(code => {
+      if (todayData[code] > 0 && !displaySubjects.some(s => s.code === code)) {
+        const sub = subjectMap[code];
+        if (sub) displaySubjects.push(sub);
+      }
+    });
 
     const todayTotal = Object.values(todayData).reduce((a, b) => a + b, 0);
     const { total: allTotal } = getAllTimeTotal();
@@ -162,25 +314,25 @@
     document.getElementById('home-all-total').textContent = formatMinutes(allTotal);
     document.getElementById('donut-center-text').textContent = formatMinutes(todayTotal);
 
-    // Subject list rendering
+    // Subject list
     const listEl = document.getElementById('home-subject-list');
     listEl.innerHTML = '';
-    subjects.forEach(s => {
+    displaySubjects.forEach(s => {
       const row = document.createElement('div');
       row.className = 'subject-item';
       row.innerHTML = `
         <span class="subject-badge" style="color: ${s.color};">■</span>
-        <span class="subject-name">${s.name}</span>
+        <span class="subject-name">${s.name}${s.deleted ? ' (삭제됨)' : ''}</span>
         <span class="subject-time">${formatMinutes(todayData[s.code] || 0)}</span>
       `;
       listEl.appendChild(row);
     });
 
     // Donut Chart
-    renderDonutChart(todayData, subjects, todayTotal);
+    renderDonutChart(todayData, displaySubjects, todayTotal);
   }
 
-  function renderDonutChart(todayData, subjects, total) {
+  function renderDonutChart(todayData, displaySubjects, total) {
     const ctx = document.getElementById('donut-canvas').getContext('2d');
     if (donutChart) donutChart.destroy();
 
@@ -191,7 +343,7 @@
       chartData = [1];
       bgColors = ['#E0E0E0'];
     } else {
-      subjects.forEach(s => {
+      displaySubjects.forEach(s => {
         const val = todayData[s.code] || 0;
         if (val > 0) {
           chartData.push(val);
@@ -231,101 +383,185 @@
     });
   }
 
-  // --- Record Screen Logic ---
-  function renderRecordScreen() {
-    const today = new Date();
-    const yInput = document.getElementById('input-year');
-    const mInput = document.getElementById('input-month');
-    const dInput = document.getElementById('input-day');
-
-    yInput.value = today.getFullYear();
-    mInput.value = today.getMonth() + 1;
-    dInput.value = today.getDate();
-    document.getElementById('record-date-error').textContent = '';
-
-    loadRecordFormData();
+  // =========================================================================
+  // 2. Stopwatch Screen Logic (Image 2 UI & Rules)
+  // =========================================================================
+  function renderStopwatchScreen() {
+    const state = initStopwatchFromSavedRecord(todayStr());
+    initStopwatchDateSelectors(state.date);
+    renderStopwatchCards(state);
+    startStopwatchLiveTicker();
   }
 
-  function getSelectedDateString() {
-    const y = parseInt(document.getElementById('input-year').value, 10);
-    const m = parseInt(document.getElementById('input-month').value, 10);
-    const d = parseInt(document.getElementById('input-day').value, 10);
+  function initStopwatchDateSelectors(selectedDateStr) {
+    const [y, m, d] = selectedDateStr.split('-').map(Number);
+    const yearInput = document.getElementById('stopwatch-year');
+    const monthSelect = document.getElementById('stopwatch-month');
+    const daySelect = document.getElementById('stopwatch-day');
 
-    if (isNaN(y) || isNaN(m) || isNaN(d) || m < 1 || m > 12 || d < 1 || d > 31) {
-      return null;
+    yearInput.value = y;
+
+    monthSelect.innerHTML = '';
+    for (let i = 1; i <= 12; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `${i}월`;
+      if (i === m) opt.selected = true;
+      monthSelect.appendChild(opt);
     }
-    const dateObj = new Date(y, m - 1, d);
-    if (dateObj.getFullYear() !== y || dateObj.getMonth() + 1 !== m || dateObj.getDate() !== d) {
-      return null;
+
+    updateStopwatchDayOptions(y, m, d);
+  }
+
+  function updateStopwatchDayOptions(year, month, selectedDay) {
+    const daySelect = document.getElementById('stopwatch-day');
+    daySelect.innerHTML = '';
+    const daysInMonth = new Date(year, month, 0).getDate();
+    for (let i = 1; i <= daysInMonth; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `${i}일`;
+      if (i === selectedDay) opt.selected = true;
+      daySelect.appendChild(opt);
     }
+  }
+
+  function getStopwatchSelectedDate() {
+    const y = parseInt(document.getElementById('stopwatch-year').value, 10);
+    const m = parseInt(document.getElementById('stopwatch-month').value, 10);
+    const d = parseInt(document.getElementById('stopwatch-day').value, 10);
     const mStr = String(m).padStart(2, '0');
     const dStr = String(d).padStart(2, '0');
     return `${y}-${mStr}-${dStr}`;
   }
 
-  function loadRecordFormData() {
-    const dateStr = getSelectedDateString() || todayStr();
-    const todayData = getRecordForDate(dateStr);
-    const subjects = getSubjects();
+  function renderStopwatchCards(state) {
+    const activeSubjects = getActiveSubjects();
+    const cardListEl = document.getElementById('stopwatch-card-list');
+    cardListEl.innerHTML = '';
 
-    const formList = document.getElementById('record-form-list');
-    formList.innerHTML = '';
+    activeSubjects.forEach(s => {
+      const isRunning = (state.activeSubject === s.code);
+      const totalSec = getLiveSecondsForSubject(state, s.code);
+      const timeHHMM = formatSecondsToHHMM(totalSec);
 
-    subjects.forEach(s => {
-      const totalMin = todayData[s.code] || 0;
-      const h = Math.floor(totalMin / 60);
-      const m = totalMin % 60;
+      const card = document.createElement('div');
+      card.className = `stopwatch-card ${isRunning ? 'running' : ''}`;
+      card.id = `stopwatch-card-${s.code}`;
 
-      const row = document.createElement('div');
-      row.className = 'form-row';
-      row.innerHTML = `
-        <div class="form-subject-info">
-          <span class="subject-badge" style="color: ${s.color};">■</span>
-          <span>${s.name}</span>
+      card.innerHTML = `
+        <div class="stopwatch-left">
+          <div class="stopwatch-subject-name">
+            <span style="color: ${s.color};">■</span>
+            ${s.name}
+          </div>
+          <button class="stopwatch-status-pill ${isRunning ? 'btn-stop' : 'btn-start'}" data-code="${s.code}">
+            ${isRunning ? '멈춤' : '시작'}
+          </button>
         </div>
-        <div class="form-input-box">
-          <input type="number" class="time-input input-hours" data-code="${s.code}" value="${h}" min="0" max="23">
-          <span class="unit-label">시간</span>
-          <input type="number" class="time-input input-minutes" data-code="${s.code}" value="${m}" min="0" max="59">
-          <span class="unit-label">분</span>
+        <div class="stopwatch-time-pill ${isRunning ? 'ticking' : ''}" id="time-display-${s.code}">
+          ${timeHHMM}
         </div>
       `;
-      formList.appendChild(row);
+
+      // Event listener for Start / Stop toggle
+      const toggleBtn = card.querySelector('.stopwatch-status-pill');
+      toggleBtn.addEventListener('click', () => handleStopwatchToggle(s.code));
+
+      cardListEl.appendChild(card);
     });
   }
 
-  function saveRecordFormData() {
-    const dateStr = getSelectedDateString();
-    const errEl = document.getElementById('record-date-error');
-    if (!dateStr) {
-      errEl.textContent = '날짜를 올바르게 입력해주세요. (예: 2026 / 2 / 3)';
-      return;
+  function handleStopwatchToggle(clickedCode) {
+    let state = getStopwatchState();
+
+    if (state.activeSubject === clickedCode) {
+      // 1. User clicked "멈춤" on currently running subject
+      const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+      state.accumulatedSeconds[clickedCode] = (state.accumulatedSeconds[clickedCode] || 0) + Math.max(0, elapsed);
+      state.activeSubject = null;
+      state.startTime = null;
+      saveStopwatchState(state);
+      renderStopwatchCards(state);
+
+    } else if (state.activeSubject !== null) {
+      // 2. User clicked "시작" while ANOTHER subject is currently running
+      // Rule: "두 스탑워치를 동시에 실행하는 건 안돼... 국어 공부로 전환하고 싶으면 멈춤 버튼을 누르면 돼. 그 다음 국어 시작 버튼을 눌러야 하고."
+      const runningSubject = getSubjectByCode(state.activeSubject);
+      const runningName = runningSubject ? runningSubject.name : '다른 과목';
+      alert(`[${runningName}] 공부가 이미 진행 중입니다!\n동시에 두 과목을 잴 수 없으므로, 먼저 진행 중인 [${runningName}]의 [멈춤] 버튼을 눌러주세요.`);
+
+    } else {
+      // 3. No subject is running -> Start this subject
+      state.activeSubject = clickedCode;
+      state.startTime = Date.now();
+      saveStopwatchState(state);
+      renderStopwatchCards(state);
     }
-    errEl.textContent = '';
+  }
 
+  // 1-second interval ticker for smooth display updates
+  function startStopwatchLiveTicker() {
+    if (stopwatchInterval) clearInterval(stopwatchInterval);
+
+    stopwatchInterval = setInterval(() => {
+      const state = getStopwatchState();
+      if (!state.activeSubject) return;
+
+      const code = state.activeSubject;
+      const totalSec = getLiveSecondsForSubject(state, code);
+      const displayEl = document.getElementById(`time-display-${code}`);
+      if (displayEl) {
+        displayEl.textContent = formatSecondsToHHMM(totalSec);
+      }
+    }, 1000);
+  }
+
+  // "공부 끝" (Finish Study) Button Action
+  function finishStudySession() {
+    let state = getStopwatchState();
+
+    // 1. Stop any currently active subject
+    if (state.activeSubject && state.startTime) {
+      const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+      state.accumulatedSeconds[state.activeSubject] = (state.accumulatedSeconds[state.activeSubject] || 0) + Math.max(0, elapsed);
+      state.activeSubject = null;
+      state.startTime = null;
+      saveStopwatchState(state);
+    }
+
+    // 2. Commit all accumulated seconds to database record (converted to minutes)
+    const targetDate = state.date || todayStr();
     const minutesDict = {};
-    const hourInputs = document.querySelectorAll('.input-hours');
-    const minInputs = document.querySelectorAll('.input-minutes');
+    let totalSavedMinutes = 0;
 
-    hourInputs.forEach(hInput => {
-      const code = hInput.getAttribute('data-code');
-      const mInput = document.querySelector(`.input-minutes[data-code="${code}"]`);
-      const h = Math.max(0, Math.min(23, parseInt(hInput.value, 10) || 0));
-      const m = Math.max(0, Math.min(59, parseInt(mInput.value, 10) || 0));
-      minutesDict[code] = (h * 60) + m;
+    Object.entries(state.accumulatedSeconds).forEach(([code, sec]) => {
+      const min = Math.floor((sec || 0) / 60);
+      minutesDict[code] = min;
+      totalSavedMinutes += min;
     });
 
-    saveRecordForDate(dateStr, minutesDict);
+    saveRecordForDate(targetDate, minutesDict);
+
+    // 3. Immediately reflect in UI & alert
+    alert(`공부가 종료되었습니다!\n총 ${formatMinutes(totalSavedMinutes)}의 기록이 저장되어 통계에 즉시 반영되었습니다.`);
+
+    // 4. Return to Home screen with updated stats
     showScreen('home');
   }
 
-  // --- Stats Screen Logic ---
+  // =========================================================================
+  // 3. Stats Screen Logic
+  // =========================================================================
   function getStatsData(period) {
-    const subjects = getSubjects();
+    const allSubjects = getAllSubjects();
     const records = getRecords();
 
+    // Determine all subjects that ever had records, or are active
+    const subjectMap = {};
+    allSubjects.forEach(s => { subjectMap[s.code] = s; });
+
     if (period === 'year') {
-      // Last 12 months average daily minutes
       const monthlyGroups = {};
       const now = new Date();
       for (let i = 11; i >= 0; i--) {
@@ -334,25 +570,30 @@
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const key = `${y}-${m}`;
         monthlyGroups[key] = { count: 0, sums: {} };
-        subjects.forEach(s => { monthlyGroups[key].sums[s.code] = 0; });
+        allSubjects.forEach(s => { monthlyGroups[key].sums[s.code] = 0; });
       }
 
       Object.entries(records).forEach(([dateStr, record]) => {
         const monthKey = dateStr.slice(0, 7);
         if (monthlyGroups[monthKey]) {
           monthlyGroups[monthKey].count += 1;
-          subjects.forEach(s => {
-            monthlyGroups[monthKey].sums[s.code] += (Number(record[s.code]) || 0);
+          Object.entries(record).forEach(([code, min]) => {
+            if (!monthlyGroups[monthKey].sums[code]) monthlyGroups[monthKey].sums[code] = 0;
+            monthlyGroups[monthKey].sums[code] += (Number(min) || 0);
           });
         }
       });
 
       const labels = Object.keys(monthlyGroups);
-      const datasets = subjects.map(s => {
+      // Only include subjects that have > 0 minutes in this period or are active
+      const relevantSubjects = allSubjects.filter(s => {
+        return !s.deleted || labels.some(mKey => (monthlyGroups[mKey].sums[s.code] || 0) > 0);
+      });
+
+      const datasets = relevantSubjects.map(s => {
         const data = labels.map(mKey => {
           const group = monthlyGroups[mKey];
-          // Average daily minutes in that month
-          const avg = group.count > 0 ? Math.round(group.sums[s.code] / group.count) : 0;
+          const avg = group.count > 0 ? Math.round((group.sums[s.code] || 0) / group.count) : 0;
           return Number((avg / 60).toFixed(2));
         });
         return {
@@ -369,15 +610,14 @@
         const group = monthlyGroups[mKey];
         if (group.count <= 0) return 0;
         let total = 0;
-        subjects.forEach(s => { total += group.sums[s.code]; });
+        relevantSubjects.forEach(s => { total += (group.sums[s.code] || 0); });
         return Math.round(total / group.count);
       });
 
       return { labels, datasets, totalsInMinutes };
 
     } else {
-      // Daily breakdown: week (7 days) or month (30 days)
-      const daysCount = period === 'week' ? 7 : 30;
+      const daysCount = (period === 'week') ? 7 : 30;
       const dates = [];
       const labels = [];
       const now = new Date();
@@ -390,7 +630,12 @@
         labels.push(dateStr.slice(5)); // MM-DD
       }
 
-      const datasets = subjects.map(s => {
+      // Check which subjects have records across these dates
+      const relevantSubjects = allSubjects.filter(s => {
+        return !s.deleted || dates.some(dStr => ((records[dStr] || {})[s.code] || 0) > 0);
+      });
+
+      const datasets = relevantSubjects.map(s => {
         const data = dates.map(dStr => {
           const entry = records[dStr] || {};
           const min = Number(entry[s.code]) || 0;
@@ -409,7 +654,7 @@
       const totalsInMinutes = dates.map(dStr => {
         const entry = records[dStr] || {};
         let dayTotal = 0;
-        subjects.forEach(s => {
+        relevantSubjects.forEach(s => {
           dayTotal += Number(entry[s.code]) || 0;
         });
         return dayTotal;
@@ -429,7 +674,6 @@
 
     if (statsChart) statsChart.destroy();
 
-    // Custom plugin to draw top total labels
     const topLabelPlugin = {
       id: 'topLabelPlugin',
       afterDatasetsDraw(chart) {
@@ -511,24 +755,262 @@
     });
   }
 
-  // --- Event Bindings ---
+  // =========================================================================
+  // 4. Settings Screen Logic (Subject Management & Manual Adjustment)
+  // =========================================================================
+  function renderSettingsScreen() {
+    renderSubjectManagementList();
+    initManualAdjustmentSection();
+  }
+
+  // 4.1 Subject Management List
+  function renderSubjectManagementList() {
+    const activeSubjects = getActiveSubjects();
+    const listEl = document.getElementById('subject-manage-list');
+    listEl.innerHTML = '';
+
+    activeSubjects.forEach(s => {
+      const item = document.createElement('div');
+      item.className = 'subject-manage-item';
+      item.innerHTML = `
+        <div class="subject-manage-left">
+          <span class="color-dot" style="background-color: ${s.color};"></span>
+          <span style="font-weight: bold; font-size: 15px;">${s.name}</span>
+          ${s.isDefault ? '<span style="font-size: 11px; color: var(--text-muted);">(기본)</span>' : ''}
+        </div>
+        <button class="btn-delete-subject" data-code="${s.code}">삭제</button>
+      `;
+
+      // Delete action with confirmation
+      const delBtn = item.querySelector('.btn-delete-subject');
+      delBtn.addEventListener('click', () => {
+        if (activeSubjects.length <= 1) {
+          alert('최소 1개 이상의 과목이 유지되어야 합니다.');
+          return;
+        }
+        subjectToDeleteCode = s.code;
+        const deleteModal = document.getElementById('delete-subject-modal');
+        const modalText = document.getElementById('delete-subject-modal-text');
+        modalText.innerHTML = `
+          <strong>[${s.name}]</strong> 과목을 정말로 삭제하시겠습니까?<br><br>
+          <span style="color: #2B6CB0; font-size: 13px;">
+            ※ 안내: 과목을 삭제하더라도 <strong>과거에 기록된 공부 시간은 절대 삭제되지 않고</strong> 통계에 안전하게 보존됩니다.
+          </span>
+        `;
+        deleteModal.classList.add('active');
+      });
+
+      listEl.appendChild(item);
+    });
+  }
+
+  // 4.2 Add Subject Modal & Color Palette
+  function openAddSubjectModal() {
+    const modal = document.getElementById('add-subject-modal');
+    const nameInput = document.getElementById('input-new-subject-name');
+    nameInput.value = '';
+    selectedNewSubjectColor = null;
+
+    // Build palette chips with in-use validation
+    const activeSubjects = getActiveSubjects();
+    const activeColors = new Set(activeSubjects.map(s => s.color.toUpperCase()));
+
+    const chipsContainer = document.getElementById('palette-chips-grid');
+    chipsContainer.innerHTML = '';
+
+    COLOR_PALETTE.forEach(c => {
+      const hexUpper = c.hex.toUpperCase();
+      const isUsed = activeColors.has(hexUpper);
+
+      const chip = document.createElement('div');
+      chip.className = `palette-chip ${c.name === '아이보리' ? 'ivory' : ''} ${isUsed ? 'disabled' : ''}`;
+      chip.style.backgroundColor = c.hex;
+      chip.textContent = c.name;
+      chip.setAttribute('data-hex', c.hex);
+
+      if (!isUsed) {
+        chip.addEventListener('click', () => {
+          document.querySelectorAll('.palette-chip').forEach(el => el.classList.remove('selected'));
+          chip.classList.add('selected');
+          selectedNewSubjectColor = c.hex;
+        });
+      }
+
+      chipsContainer.appendChild(chip);
+    });
+
+    modal.classList.add('active');
+  }
+
+  function confirmAddSubject() {
+    const nameInput = document.getElementById('input-new-subject-name');
+    const name = nameInput.value.trim();
+
+    if (!name) {
+      alert('과목 이름을 입력해주세요.');
+      nameInput.focus();
+      return;
+    }
+
+    if (!selectedNewSubjectColor) {
+      alert('사용할 색상을 팔레트에서 선택해주세요.');
+      return;
+    }
+
+    addNewSubject(name, selectedNewSubjectColor);
+    document.getElementById('add-subject-modal').classList.remove('active');
+    renderSubjectManagementList();
+  }
+
+  // 4.3 Manual Adjustment Section
+  function initManualAdjustmentSection() {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = today.getMonth() + 1;
+    const d = today.getDate();
+
+    const yInput = document.getElementById('manual-year');
+    const mSelect = document.getElementById('manual-month');
+    const dSelect = document.getElementById('manual-day');
+
+    yInput.value = y;
+
+    mSelect.innerHTML = '';
+    for (let i = 1; i <= 12; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `${i}월`;
+      if (i === m) opt.selected = true;
+      mSelect.appendChild(opt);
+    }
+
+    updateManualDayOptions(y, m, d);
+    loadManualAdjustmentData();
+  }
+
+  function updateManualDayOptions(year, month, selectedDay) {
+    const dSelect = document.getElementById('manual-day');
+    dSelect.innerHTML = '';
+    const daysInMonth = new Date(year, month, 0).getDate();
+    for (let i = 1; i <= daysInMonth; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `${i}일`;
+      if (i === selectedDay) opt.selected = true;
+      dSelect.appendChild(opt);
+    }
+  }
+
+  function getManualSelectedDate() {
+    const y = parseInt(document.getElementById('manual-year').value, 10);
+    const m = parseInt(document.getElementById('manual-month').value, 10);
+    const d = parseInt(document.getElementById('manual-day').value, 10);
+    const mStr = String(m).padStart(2, '0');
+    const dStr = String(d).padStart(2, '0');
+    return `${y}-${mStr}-${dStr}`;
+  }
+
+  function loadManualAdjustmentData() {
+    const dateStr = getManualSelectedDate();
+    const dayData = getRecordForDate(dateStr);
+    const allSubjects = getAllSubjects();
+    const activeSubjects = getActiveSubjects();
+
+    // Include active subjects, plus any deleted subject with saved minutes for this date
+    const displaySubjects = [...activeSubjects];
+    allSubjects.forEach(s => {
+      if (s.deleted && (dayData[s.code] || 0) > 0 && !displaySubjects.some(item => item.code === s.code)) {
+        displaySubjects.push(s);
+      }
+    });
+
+    const gridEl = document.getElementById('manual-adjust-grid');
+    gridEl.innerHTML = '';
+
+    displaySubjects.forEach(s => {
+      const totalMin = dayData[s.code] || 0;
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+
+      const row = document.createElement('div');
+      row.className = 'manual-row';
+      row.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="color: ${s.color};">■</span>
+          <span style="font-weight: bold; font-size: 14px;">${s.name}${s.deleted ? ' (삭제됨)' : ''}</span>
+        </div>
+        <div class="manual-inputs">
+          <input type="number" class="date-select manual-hour" data-code="${s.code}" value="${h}" min="0" max="23" style="width: 50px; text-align: center;">
+          <span style="font-size: 13px;">시간</span>
+          <input type="number" class="date-select manual-min" data-code="${s.code}" value="${m}" min="0" max="59" style="width: 50px; text-align: center;">
+          <span style="font-size: 13px;">분</span>
+        </div>
+      `;
+      gridEl.appendChild(row);
+    });
+  }
+
+  function saveManualAdjustmentData() {
+    const dateStr = getManualSelectedDate();
+    const minutesDict = {};
+
+    document.querySelectorAll('.manual-hour').forEach(hInput => {
+      const code = hInput.getAttribute('data-code');
+      const mInput = document.querySelector(`.manual-min[data-code="${code}"]`);
+      const h = Math.max(0, Math.min(23, parseInt(hInput.value, 10) || 0));
+      const m = Math.max(0, Math.min(59, parseInt(mInput.value, 10) || 0));
+      minutesDict[code] = (h * 60) + m;
+    });
+
+    saveRecordForDate(dateStr, minutesDict);
+
+    // If adjusting today's date, also sync stopwatch accumulated seconds
+    const state = getStopwatchState();
+    if (state.date === dateStr) {
+      Object.entries(minutesDict).forEach(([code, min]) => {
+        state.accumulatedSeconds[code] = min * 60;
+      });
+      saveStopwatchState(state);
+    }
+
+    alert(`[${dateStr}] 공부시간이 성공적으로 수정되었습니다!`);
+  }
+
+  // =========================================================================
+  // 5. Global Event Bindings & Initializer
+  // =========================================================================
   function initEvents() {
-    // Nav bar
+    // 5.1 Nav Bar
     document.getElementById('nav-btn-home').addEventListener('click', () => showScreen('home'));
     document.getElementById('nav-btn-stats').addEventListener('click', () => showScreen('stats'));
 
-    // Home buttons
+    // 5.2 Home Buttons
     document.getElementById('btn-go-record').addEventListener('click', () => showScreen('record'));
     document.getElementById('btn-go-settings').addEventListener('click', () => showScreen('settings'));
 
-    // Record buttons & date change
-    ['input-year', 'input-month', 'input-day'].forEach(id => {
-      document.getElementById(id).addEventListener('change', loadRecordFormData);
-    });
-    document.getElementById('btn-save-record').addEventListener('click', saveRecordFormData);
-    document.getElementById('btn-cancel-record').addEventListener('click', () => showScreen('home'));
+    // 5.3 Stopwatch Screen Events
+    const yInput = document.getElementById('stopwatch-year');
+    const mSelect = document.getElementById('stopwatch-month');
+    const dSelect = document.getElementById('stopwatch-day');
 
-    // Stats period filter
+    const onStopwatchDateChange = () => {
+      const y = parseInt(yInput.value, 10);
+      const m = parseInt(mSelect.value, 10);
+      const curD = parseInt(dSelect.value, 10);
+      updateStopwatchDayOptions(y, m, curD);
+
+      const newDate = getStopwatchSelectedDate();
+      const state = initStopwatchFromSavedRecord(newDate);
+      renderStopwatchCards(state);
+    };
+
+    yInput.addEventListener('change', onStopwatchDateChange);
+    mSelect.addEventListener('change', onStopwatchDateChange);
+    dSelect.addEventListener('change', onStopwatchDateChange);
+
+    document.getElementById('btn-finish-study').addEventListener('click', finishStudySession);
+
+    // 5.4 Stats Screen Filter Buttons
     document.querySelectorAll('.filter-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -538,19 +1020,61 @@
       });
     });
 
-    // Settings
-    const modal = document.getElementById('confirm-modal');
+    // 5.5 Settings Screen Events
+    document.getElementById('btn-open-add-subject').addEventListener('click', openAddSubjectModal);
+    document.getElementById('btn-confirm-add-subject').addEventListener('click', confirmAddSubject);
+    document.getElementById('btn-cancel-add-subject').addEventListener('click', () => {
+      document.getElementById('add-subject-modal').classList.remove('active');
+    });
+
+    // Confirm Delete Subject Modal
+    document.getElementById('btn-confirm-delete-subject').addEventListener('click', () => {
+      if (subjectToDeleteCode) {
+        softDeleteSubject(subjectToDeleteCode);
+        subjectToDeleteCode = null;
+        document.getElementById('delete-subject-modal').classList.remove('active');
+        renderSubjectManagementList();
+      }
+    });
+    document.getElementById('btn-cancel-delete-subject').addEventListener('click', () => {
+      subjectToDeleteCode = null;
+      document.getElementById('delete-subject-modal').classList.remove('active');
+    });
+
+    // Manual Adjustment Date Events
+    const manY = document.getElementById('manual-year');
+    const manM = document.getElementById('manual-month');
+    const manD = document.getElementById('manual-day');
+
+    const onManualDateChange = () => {
+      const y = parseInt(manY.value, 10);
+      const m = parseInt(manM.value, 10);
+      const curD = parseInt(manD.value, 10);
+      updateManualDayOptions(y, m, curD);
+      loadManualAdjustmentData();
+    };
+
+    manY.addEventListener('change', onManualDateChange);
+    manM.addEventListener('change', onManualDateChange);
+    manD.addEventListener('change', onManualDateChange);
+
+    document.getElementById('btn-save-manual').addEventListener('click', saveManualAdjustmentData);
+
+    // Reset All Records Modal
+    const resetModal = document.getElementById('confirm-modal');
     document.getElementById('btn-open-reset-modal').addEventListener('click', () => {
-      modal.classList.add('active');
+      resetModal.classList.add('active');
     });
     document.getElementById('btn-modal-cancel').addEventListener('click', () => {
-      modal.classList.remove('active');
+      resetModal.classList.remove('active');
     });
     document.getElementById('btn-modal-confirm').addEventListener('click', () => {
       clearAllRecords();
-      modal.classList.remove('active');
+      resetModal.classList.remove('active');
       showScreen('home');
+      alert('모든 공부 기록이 초기화되었습니다.');
     });
+
     document.getElementById('btn-settings-back').addEventListener('click', () => showScreen('home'));
   }
 
