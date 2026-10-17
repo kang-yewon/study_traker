@@ -611,6 +611,34 @@ body {
   margin-top: 4px;
 }
 
+.btn-backup {
+  flex: 1;
+  height: 44px;
+  border: none;
+  border-radius: 8px;
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+
+.btn-backup:active {
+  opacity: 0.85;
+}
+
+.btn-export {
+  background-color: #3182CE;
+}
+
+.btn-import {
+  background-color: #38A169;
+}
+
 .btn-reset {
   height: 44px;
   background-color: var(--danger);
@@ -623,17 +651,47 @@ body {
   cursor: pointer;
 }
 
+.settings-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.btn-top-back {
+  background: none;
+  border: none;
+  font-size: 22px;
+  font-weight: bold;
+  color: #2D3748;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+}
+
+.btn-top-back:active {
+  background-color: #EDF2F7;
+}
+
 .btn-back-home {
-  height: 48px;
+  height: 58px;
   background-color: var(--secondary-dark);
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   color: #FFFFFF;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: bold;
   cursor: pointer;
   margin-top: auto;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn-back-home:active {
+  background-color: #616e70;
+  transform: translateY(1px);
 }
 
 /* Palette Modal */

@@ -268,15 +268,23 @@
     const target = document.getElementById(`screen-${name}`);
     if (target) target.classList.add('active');
 
-    // Update navbar active state
+    // Update navbar active state and visibility
+    const navbar = document.querySelector('.navbar');
     const homeBtn = document.getElementById('nav-btn-home');
     const statsBtn = document.getElementById('nav-btn-stats');
-    if (name === 'home' || name === 'record' || name === 'settings') {
-      homeBtn.classList.add('active');
-      statsBtn.classList.remove('active');
-    } else if (name === 'stats') {
-      homeBtn.classList.remove('active');
-      statsBtn.classList.add('active');
+
+    if (name === 'settings') {
+      // User rule: 설정 들어가면 위쪽에 HOME 과 통계 탭이 없어야 해
+      if (navbar) navbar.style.display = 'none';
+    } else {
+      if (navbar) navbar.style.display = 'flex';
+      if (name === 'home' || name === 'record') {
+        homeBtn.classList.add('active');
+        statsBtn.classList.remove('active');
+      } else if (name === 'stats') {
+        homeBtn.classList.remove('active');
+        statsBtn.classList.add('active');
+      }
     }
 
     if (name === 'home') renderHomeScreen();
@@ -977,6 +985,187 @@
   }
 
   // =========================================================================
+  // 4.4 Data Backup: TXT Export & Import
+  // =========================================================================
+  function exportRecordsToTxt() {
+    const allSubjects = getAllSubjects();
+    const allRecords = getRecords();
+
+    let textOutput = '';
+    textOutput += '==================================================\n';
+    textOutput += '           StudyTimer 공부 기록 백업 파일          \n';
+    textOutput += `  내보낸 일시: ${new Date().toLocaleString('ko-KR')}\n`;
+    textOutput += '==================================================\n\n';
+
+    textOutput += '[과목 목록]\n';
+    allSubjects.forEach(s => {
+      textOutput += `- ${s.name} (코드: ${s.code}, 색상: ${s.color})${s.deleted ? ' [삭제된 과목]' : ''}\n`;
+    });
+    textOutput += '\n';
+
+    textOutput += '[날짜별 공부 시간 기록]\n';
+    const sortedDates = Object.keys(allRecords).sort();
+    if (sortedDates.length === 0) {
+      textOutput += '(저장된 공부 기록이 없습니다)\n';
+    } else {
+      sortedDates.forEach(dateStr => {
+        const dayData = allRecords[dateStr];
+        const parts = [];
+        Object.entries(dayData).forEach(([code, min]) => {
+          if (min > 0) {
+            const sub = allSubjects.find(s => s.code === code);
+            const name = sub ? sub.name : code;
+            parts.push(`${name}: ${min}분 (${formatMinutes(min)})`);
+          }
+        });
+        textOutput += `${dateStr} => ${parts.length > 0 ? parts.join(', ') : '0분'}\n`;
+      });
+    }
+    textOutput += '\n';
+
+    // Automated JSON Payload block
+    textOutput += '==================================================\n';
+    textOutput += '# SYSTEM BACKUP DATA (자동 복원용 데이터 블록)\n';
+    textOutput += '==================================================\n';
+    const payload = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      subjects: allSubjects,
+      records: allRecords
+    };
+    textOutput += '[DATA_JSON_START]\n';
+    textOutput += JSON.stringify(payload, null, 2) + '\n';
+    textOutput += '[DATA_JSON_END]\n';
+
+    // Trigger Download
+    const filename = `StudyTimer_기록_${todayStr()}.txt`;
+    const blob = new Blob([textOutput], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 300);
+  }
+
+  function parseFallbackTxt(content) {
+    const records = {};
+    const lines = content.split('\n');
+    let currentDate = null;
+    const allSubjects = getAllSubjects();
+
+    lines.forEach(rawLine => {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#') || line.startsWith('=')) return;
+
+      const dateMatch = line.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (dateMatch) {
+        currentDate = dateMatch[1];
+        if (!records[currentDate]) records[currentDate] = {};
+        if (line.includes('=>')) {
+          const after = line.split('=>')[1];
+          after.split(',').forEach(item => {
+            if (item.includes(':')) {
+              const [namePart, minPart] = item.split(':');
+              const cleanName = namePart.trim();
+              const minMatch = minPart.match(/\d+/);
+              if (minMatch) {
+                const min = parseInt(minMatch[0], 10);
+                const sub = allSubjects.find(s => s.name === cleanName || s.code === cleanName);
+                const code = sub ? sub.code : cleanName;
+                records[currentDate][code] = min;
+              }
+            }
+          });
+        }
+      }
+    });
+    return { records };
+  }
+
+  function importRecordsFromTxt(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      try {
+        const content = evt.target.result;
+        let importedData = null;
+
+        if (content.includes('[DATA_JSON_START]') && content.includes('[DATA_JSON_END]')) {
+          const jsonPart = content.split('[DATA_JSON_START]')[1].split('[DATA_JSON_END]')[0].trim();
+          importedData = JSON.parse(jsonPart);
+        } else {
+          try {
+            importedData = JSON.parse(content);
+          } catch (e) {
+            importedData = parseFallbackTxt(content);
+          }
+        }
+
+        if (!importedData || !importedData.records) {
+          throw new Error('유효한 StudyTimer 기록 데이터가 없습니다.');
+        }
+
+        // 1. Merge subjects
+        if (Array.isArray(importedData.subjects)) {
+          const currentSubjects = getAllSubjects();
+          importedData.subjects.forEach(newSub => {
+            const exists = currentSubjects.find(s => s.code === newSub.code);
+            if (!exists) {
+              currentSubjects.push(newSub);
+            }
+          });
+          saveAllSubjects(currentSubjects);
+        }
+
+        // 2. Overwrite records:
+        // Rule: 동일한 날짜의 기록이 다르면 텍스트 파일의 기록으로 덮어씀
+        const currentRecords = getRecords();
+        let overwrittenCount = 0;
+        let newCount = 0;
+
+        Object.entries(importedData.records).forEach(([dateStr, record]) => {
+          if (currentRecords[dateStr]) {
+            overwrittenCount++;
+          } else {
+            newCount++;
+          }
+          currentRecords[dateStr] = { ...record };
+        });
+
+        saveRecords(currentRecords);
+
+        // 3. Sync today's stopwatch state if today is updated
+        const today = todayStr();
+        if (importedData.records[today]) {
+          const state = getStopwatchState();
+          if (state.date === today) {
+            state.accumulatedSeconds = {};
+            Object.entries(importedData.records[today]).forEach(([code, min]) => {
+              state.accumulatedSeconds[code] = (min || 0) * 60;
+            });
+            saveStopwatchState(state);
+          }
+        }
+
+        alert(`기록 텍스트 파일을 성공적으로 불러왔습니다!\n- 신규 추가된 날짜: ${newCount}일\n- 텍스트 파일 기록으로 덮어쓴 날짜: ${overwrittenCount}일`);
+
+        renderSettingsScreen();
+        renderHomeScreen();
+
+      } catch (err) {
+        console.error(err);
+        alert('파일을 불러오는 중 오류가 발생했습니다: ' + err.message);
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  // =========================================================================
   // 5. Global Event Bindings & Initializer
   // =========================================================================
   function initEvents() {
@@ -1021,6 +1210,11 @@
     });
 
     // 5.5 Settings Screen Events
+    const topBackBtn = document.getElementById('btn-settings-top-back');
+    if (topBackBtn) {
+      topBackBtn.addEventListener('click', () => showScreen('home'));
+    }
+
     document.getElementById('btn-open-add-subject').addEventListener('click', openAddSubjectModal);
     document.getElementById('btn-confirm-add-subject').addEventListener('click', confirmAddSubject);
     document.getElementById('btn-cancel-add-subject').addEventListener('click', () => {
@@ -1059,6 +1253,18 @@
     manD.addEventListener('change', onManualDateChange);
 
     document.getElementById('btn-save-manual').addEventListener('click', saveManualAdjustmentData);
+
+    // Backup & Restore Events
+    document.getElementById('btn-export-records').addEventListener('click', exportRecordsToTxt);
+    document.getElementById('btn-import-records').addEventListener('click', () => {
+      document.getElementById('file-import-input').click();
+    });
+    document.getElementById('file-import-input').addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        importRecordsFromTxt(e.target.files[0]);
+      }
+      e.target.value = '';
+    });
 
     // Reset All Records Modal
     const resetModal = document.getElementById('confirm-modal');
