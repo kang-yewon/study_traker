@@ -13,8 +13,13 @@
     { code: 'social', name: '사회', color: '#F1C40F', isDefault: true, deleted: false }
   ];
 
-  // Available Color Palette (as requested by user)
+  // Available Color Palette (5 default subject colors + 6 custom colors = 11 colors)
   const COLOR_PALETTE = [
+    { name: '파랑', hex: '#4A90E2' },
+    { name: '초록', hex: '#2ECC71' },
+    { name: '주황', hex: '#F39C12' },
+    { name: '보라', hex: '#9B59B6' },
+    { name: '노랑', hex: '#F1C40F' },
     { name: '빨강', hex: '#E74C3C' },
     { name: '분홍', hex: '#FF69B4' },
     { name: '갈색', hex: '#8D6E63' },
@@ -830,10 +835,11 @@
       const hexUpper = c.hex.toUpperCase();
       const isUsed = activeColors.has(hexUpper);
 
+      const isLightColor = c.name === '아이보리' || c.name === '노랑';
       const chip = document.createElement('div');
-      chip.className = `palette-chip ${c.name === '아이보리' ? 'ivory' : ''} ${isUsed ? 'disabled' : ''}`;
+      chip.className = `palette-chip ${isLightColor ? 'ivory' : ''} ${isUsed ? 'disabled' : ''}`;
       chip.style.backgroundColor = c.hex;
-      chip.textContent = c.name;
+      chip.textContent = isUsed ? `${c.name} (사용중)` : c.name;
       chip.setAttribute('data-hex', c.hex);
 
       if (!isUsed) {
@@ -987,7 +993,7 @@
   // =========================================================================
   // 4.4 Data Backup: TXT Export & Import
   // =========================================================================
-  function exportRecordsToTxt() {
+  async function exportRecordsToTxt() {
     const allSubjects = getAllSubjects();
     const allRecords = getRecords();
 
@@ -1037,19 +1043,57 @@
     textOutput += JSON.stringify(payload, null, 2) + '\n';
     textOutput += '[DATA_JSON_END]\n';
 
-    // Trigger Download
     const filename = `StudyTimer_기록_${todayStr()}.txt`;
-    const blob = new Blob([textOutput], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 300);
+
+    // 1. Show modal preview with full text so user can always view and copy directly
+    const modal = document.getElementById('export-modal');
+    const previewEl = document.getElementById('export-text-preview');
+    if (modal && previewEl) {
+      previewEl.value = textOutput;
+      modal.classList.add('active');
+    }
+
+    // 2. Try native Android Filesystem + Share Sheet via Capacitor plugins
+    try {
+      const Filesystem = window.Capacitor?.Plugins?.Filesystem;
+      const Share = window.Capacitor?.Plugins?.Share;
+      if (Filesystem && Share) {
+        const writeResult = await Filesystem.writeFile({
+          path: filename,
+          data: textOutput,
+          directory: 'CACHE',
+          encoding: 'utf8'
+        });
+
+        if (writeResult && writeResult.uri) {
+          await Share.share({
+            title: 'StudyTimer 기록 내보내기',
+            text: 'StudyTimer 공부 기록 백업 텍스트 파일입니다.',
+            url: writeResult.uri,
+            dialogTitle: '기록 백업 파일 저장 및 공유'
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Native export error:', err);
+    }
+
+    // 3. Web download fallback for desktop browser
+    try {
+      const blob = new Blob([textOutput], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 300);
+    } catch (e) {
+      console.warn('Web blob download fallback error:', e);
+    }
   }
 
   function parseFallbackTxt(content) {
@@ -1275,6 +1319,38 @@
       showScreen('home');
       alert('모든 공부 기록이 초기화되었습니다.');
     });
+
+    // Export Modal Events
+    const exportModal = document.getElementById('export-modal');
+    const btnCopyExport = document.getElementById('btn-copy-export-text');
+    const btnCloseExport = document.getElementById('btn-close-export-modal');
+
+    if (btnCopyExport) {
+      btnCopyExport.addEventListener('click', () => {
+        const preview = document.getElementById('export-text-preview');
+        if (preview && preview.value) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(preview.value).then(() => {
+              alert('백업 데이터가 클립보드에 복사되었습니다!');
+            }).catch(() => {
+              preview.select();
+              document.execCommand('copy');
+              alert('백업 데이터가 클립보드에 복사되었습니다!');
+            });
+          } else {
+            preview.select();
+            document.execCommand('copy');
+            alert('백업 데이터가 클립보드에 복사되었습니다!');
+          }
+        }
+      });
+    }
+
+    if (btnCloseExport) {
+      btnCloseExport.addEventListener('click', () => {
+        if (exportModal) exportModal.classList.remove('active');
+      });
+    }
 
     document.getElementById('btn-settings-back').addEventListener('click', () => showScreen('home'));
   }
