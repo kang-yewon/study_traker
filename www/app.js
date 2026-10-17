@@ -954,12 +954,29 @@
           <span style="font-weight: bold; font-size: 14px;">${s.name}${s.deleted ? ' (삭제됨)' : ''}</span>
         </div>
         <div class="manual-inputs">
-          <input type="number" class="date-select manual-hour" data-code="${s.code}" value="${h}" min="0" max="23" style="width: 50px; text-align: center;">
+          <input type="number" class="date-select manual-hour" data-code="${s.code}" value="${h}" min="0" max="99" style="width: 55px; text-align: center;">
           <span style="font-size: 13px;">시간</span>
-          <input type="number" class="date-select manual-min" data-code="${s.code}" value="${m}" min="0" max="59" style="width: 50px; text-align: center;">
+          <input type="number" class="date-select manual-min" data-code="${s.code}" value="${m}" min="0" style="width: 55px; text-align: center;">
           <span style="font-size: 13px;">분</span>
         </div>
       `;
+
+      // Automatically convert minutes >= 60 into hours and remaining minutes
+      const hInput = row.querySelector('.manual-hour');
+      const mInput = row.querySelector('.manual-min');
+      const normalizeInputs = () => {
+        let curH = Math.max(0, parseInt(hInput.value, 10) || 0);
+        let curM = Math.max(0, parseInt(mInput.value, 10) || 0);
+        if (curM >= 60) {
+          curH += Math.floor(curM / 60);
+          curM = curM % 60;
+          hInput.value = curH;
+          mInput.value = curM;
+        }
+      };
+      mInput.addEventListener('change', normalizeInputs);
+      mInput.addEventListener('blur', normalizeInputs);
+
       gridEl.appendChild(row);
     });
   }
@@ -971,9 +988,15 @@
     document.querySelectorAll('.manual-hour').forEach(hInput => {
       const code = hInput.getAttribute('data-code');
       const mInput = document.querySelector(`.manual-min[data-code="${code}"]`);
-      const h = Math.max(0, Math.min(23, parseInt(hInput.value, 10) || 0));
-      const m = Math.max(0, Math.min(59, parseInt(mInput.value, 10) || 0));
-      minutesDict[code] = (h * 60) + m;
+      const rawH = Math.max(0, parseInt(hInput.value, 10) || 0);
+      const rawM = Math.max(0, parseInt(mInput.value, 10) || 0);
+      const totalMin = (rawH * 60) + rawM;
+
+      // Normalize displayed inputs to canonical hours and minutes (e.g., 77분 -> 1시간 17분)
+      hInput.value = Math.floor(totalMin / 60);
+      mInput.value = totalMin % 60;
+
+      minutesDict[code] = totalMin;
     });
 
     saveRecordForDate(dateStr, minutesDict);
